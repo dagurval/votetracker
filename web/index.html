@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="BIP100 - Dynamic maximum block size by miner vote">
+    <meta name="author" content="">
+    <link rel="icon" href="favicon.ico">
+
+    <title>BIP100 - Dynamic maximum block size by miner vote</title>
+
+    <!-- Bootstrap core CSS -->
+    <link href="bootstrap-4.0.0-alpha.6-dist/css/bootstrap.min.css" rel="stylesheet">
+
+    <!-- Custom styles for this template -->
+    <link href="narrow-jumbotron.css" rel="stylesheet">
+    <link href="bip100.css" rel="stylesheet">
+
+  <script type="text/javascript" src="jquery-3.2.0.min.js"></script>
+  <script type="text/javascript" src="tether.min.js"></script>
+  <script type="text/javascript" src="bootstrap-4.0.0-alpha.6-dist/js/bootstrap.min.js"></script>
+  </head>
+
+  <body>
+
+<script type="text/javascript">
+
+var BLOCK_NOT_FOUND = -1;
+var BLOCKS_IN_PERIOD = 2016;
+
+function fetch(what, succs, err) {
+    $.ajax({
+        url: "/period/" + what + ".json",
+        success: succs,
+        error : err
+    });
+}
+
+function err() {
+    console.log("Error fetching json");
+}
+
+function toBytes(mb) {
+    return mb * 1000000;
+}
+
+function toMB(bytes) {
+    return bytes / 1000000;
+}
+
+var entityMap = {
+'&': '&amp;',
+'<': '&lt;',
+'>': '&gt;',
+'"': '&quot;',
+"'": '&#39;',
+'/': '&#x2F;',
+'`': '&#x60;',
+'=': '&#x3D;'
+};
+
+function escapeHtml (string) {
+return String(string).replace(/[&<>"'`=\/]/g, function fromEntityMap (s) {
+  return entityMap[s];
+});
+}
+
+function voteCell(vote) {
+
+    title = "Vote: %vote% - Height: %height% - Coinbase: %coinbase%";
+    url = "https://blockchair.com/bitcoin/block/%height%";
+
+    tpl = '<td class="%class%">'
+        + '<a href="%url%"'
+            + 'title="%title%"'
+            + 'data-toggle="tooltip"'
+            + 'target="_blank"></a></td>';
+
+    want = vote["sizelimitvote"];
+    curr = vote["sizelimit"];
+    style = "";
+    votestr = toMB(vote["sizelimitvote"]) + "MB";
+    if (want == BLOCK_NOT_FOUND) {
+        style = "vote-notfound";
+        title = "Block not found yet";
+        url = "#";
+        votestr = "No yet voted";
+    }
+    else if (want == 0 || want == curr)
+    {
+        style = "vote-keepcurrent";
+        votestr = "Keep current";
+    }
+    else if (want < curr)
+        style = "vote-down";
+    else if (want > curr)
+        style = "vote-up";
+    else
+        console.log("ERROR voteCell");
+
+    return tpl
+        .replace("%url%", url)
+        .replace("%title%", title)
+        .replace("%class%", style)
+        .replace("%height%", vote["height"])
+        .replace("%height%", vote["height"])
+        .replace("%coinbase%", escapeHtml(vote["coinbase_str"]))
+        .replace("%vote%", votestr);
+}
+
+function fillMissingVotes(votes) {
+    missing = BLOCKS_IN_PERIOD - votes.length;
+    for (i = 0; i < missing; ++i)
+        votes.push({ "sizelimitvote" : BLOCK_NOT_FOUND });
+    return votes;
+}
+
+function renderVoteRow(votes) {
+    html = '<table class="votetable"><tr>';
+    $.each(votes, function(k, v) {
+        newRow = k % 72 == 0;
+        if (newRow)
+            html += "</tr><tr>";
+        html += voteCell(v);
+    });
+    html += "</tr></table>";
+    $("#voterow").html(html);
+    $('[data-toggle="tooltip"]').tooltip();
+}
+
+function updateVoteHeader(votes) {
+    start = votes[0]["height"];
+    is_current = votes[votes.length - 1]["sizelimitvote"] == BLOCK_NOT_FOUND;
+    end = start + (BLOCKS_IN_PERIOD - 1);
+
+    header = is_current
+                   ? 'Votes current period <br /><span style="font-size : smaller;">(' + start.toLocaleString() + " - " + end.toLocaleString() + ")</span>"
+        : "Votes for period " + start + " - " + end;
+
+    $("#miner-votes-header").html(header);
+}
+
+function updateProgress(votes) {
+    curr_limit = votes[0]["sizelimit"];
+
+    keep = 0;
+    bigger = 0;
+    smaller = 0;
+
+    is_current_period = false;
+
+    $.each(votes, function(i, v) {
+        vote = v["sizelimitvote"];
+        if (vote == BLOCK_NOT_FOUND) {
+            is_current_period = true;
+            return;
+        }
+        if (vote == 0 || vote == curr_limit)
+            keep++;
+        else if (vote > curr_limit)
+            bigger++;
+        else
+            smaller++;
+    });
+
+    total = keep + bigger + smaller;
+
+    function fitWidth(perc) {
+        // labels take up 15% of the width, so reduce perc accordingly.
+        return (((perc - 0) * (85 - 0)) / (100 - 0)) + 0;
+    };
+
+    perc = Math.floor((bigger / total) * 100);
+    $("#progr-bigger").css("width",  fitWidth(perc) + "%");
+    $("#progr-bigger").text(perc + "%");
+
+    perc = Math.floor((keep / total) * 100);
+    $("#progr-keep").css("width",  fitWidth(perc) + "%");
+    $("#progr-keep").text(perc + "%");
+
+    perc = Math.floor((smaller / total) * 100);
+    $("#progr-smaller").css("width",  fitWidth(perc) + "%");
+    $("#progr-smaller").text(perc + "%");
+
+    if (is_current_period) {
+        $("#progr-bigger").addClass("progress-bar-animated");
+        $("#progr-keep").addClass("progress-bar-animated");
+        $("#progr-smaller").addClass("progress-bar-animated");
+    }
+}
+
+function onPeriodLoaded(votes) {
+    votes = fillMissingVotes(votes);
+    updateVoteHeader(votes);
+    renderVoteRow(votes);
+    updateProgress(votes);
+    updateStats(votes);
+}
+
+function updateStats(votes) {
+    curr = parseInt(votes[0]["sizelimit"]);
+    next_max = curr * 1.05;
+    next_min = Math.max(toBytes(1) , curr * 0.95);
+
+    $("#current-size").text(toMB(curr) + "MB");
+    $("#next-max").text(toMB(next_max) + "MB");
+    $("#next-min").text(toMB(next_min) + "MB");
+};
+
+function unixToDate(unixtime) {
+    var d = new Date(unixtime * 1000);
+    return d.getDate();
+
+}
+
+function updatePeriodDropdown(periods) {
+    menu_items = "";
+    $.each(periods.slice().reverse(), function(i, p) {
+        item = '<a class="dropdown-item" href="/?%period_start%">'
+            + '%period_start% - %period_end%</a>';
+        item = item
+            .replace("%period_start%", p)
+            .replace("%period_start%", parseInt(p).toLocaleString())
+            .replace("%period_end%", (parseInt(p) + (BLOCKS_IN_PERIOD - 1)).toLocaleString());
+        menu_items += item;
+    });
+    $("#period-dropdown").html(menu_items);
+}
+
+$(document).ready(function() {
+    fetch("list", function(periods) {
+        updatePeriodDropdown(periods);
+        var latest = periods[periods.length - 1];
+        var period = document.URL.substr(document.URL.indexOf('?')+1)
+
+        if (periods.indexOf(period) == -1)
+            // invalid selection / not selected
+            period = latest;
+
+        fetch(period, onPeriodLoaded, err);
+    }, err);
+});
+
+</script>
+
+    <div class="container">
+      <div class="header clearfix">
+        <h3 class="text-muted">BIP100 - Dynamic maximum block size by miner vote</h3>
+      </div>
+
+      <div class="jumbotron">
+        <h3 style="text-align : center;" id="miner-votes-header">Loading miner votes...</h3>
+
+        <div class="" style="margin-top : 1rem;" id="voterow"></div>
+        <div class="progress" style="margin-top : 1em;">
+            <span style="width : 15%; text-align: left;">Bigger blocks:</span>
+            <div id="progr-bigger" class="progress-bar progress-bar-striped bg-success"
+                  role="progressbar" style="width: 0%"></div>
+        </div>
+        <div class="progress" style="margin-top : 1em;">
+            <div style="width : 15%; text-align : left;">Keep size:</div>
+            <div id="progr-keep"  class="progress-bar progress-bar-striped"
+              role="progressbar" style="width: 0%"></div>
+        </div>
+
+        <div class="progress" style="margin-top : 1em;">
+            <div style="width : 15%; text-align : left;">Smaller blocks:</div>
+            <div id="progr-smaller"
+                 class="progress-bar progress-bar-striped bg-warning"
+                  role="progressbar" style="width: 0%"></div>
+        </div>
+        <p style="margin-top : 1rem; font-size : small;">75% of miners must vote for increase or decrease for a block size change to take effect.</p>
+
+        <div>
+        <ul>
+            <li style="font-weight : bold;">Block size limit for period: <span id="current-size">Loading...</span>.</li>
+            <li>Maximum next size if voted-in: <span id="next-max">Loading...</span>.</li>
+            <li>Minimum next size if voted-in: <span id="next-min">Loading...</span>.</li>
+        </ul>
+        </div>
+
+        <div class="dropdown">
+            <button class="btn btn-primary dropdown-toggle" type="button"
+                data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+                View vote period...
+            </button>
+            <div id="period-dropdown" class="dropdown-menu">
+            </div>
+        </div>
+
+      </div>
+
+      <div class="row marketing">
+        <div class="col-lg-6">
+          <h4>What is BIP100?</h4>
+          <p>BIP100 replaces the static 1MB block size limit in Bitcoin with a hard limit set by coinbase vote.</p>
+          <p>A simple deterministic system is specified, whereby a 75% mining supermajority may activate a change to the maximum block size each 2016 blocks.</p>
+          <p>Each change is limited to a 5% increase from the previous block size hard limit, or a decrease of similar magnitude.</p>
+          <p><a href="https://github.com/jgarzik/bip100/blob/master/bip-0100.mediawiki">View BIP100 - Full Specification</a></p>
+
+          <h4>What does a vote look like?</h4>
+          <div>
+              <p>Voting is done in the coinbase transaction. A BIP100 vote for 8MB looks like this:</p>
+              <blockquote class="blockquote">
+                  <p class="mb-0">/BIP100/B8/</p>
+              </blockquote>
+              <p>If there is no BIP100 vote, then a EB will be counted as a vote. So /EB8/ is also a vote for 8MB (and a promise to accept 8MB blocks).</p>
+              <p>This allows both BIP100 vote and EB signal to be present, so a BIP100 miner may publish</p>
+              <blockquote class="blockquote">
+                  <p class="mb-0">/BIP100/B8/EB2.1/</p>
+              </blockquote>
+              <p>meaning that he votes for 8MB, but currently accepts block of size 2.1MB.</p>
+          </div>
+
+
+        <h4>In the media</h4>
+        <div>
+            <ul>
+                <li><a href="https://news.bitcoin.com/bitcoin-block-size-growth-plan-bip100-gets-update/">Bitcoin Block Size Growth Plan 'BIP100' Gets Update</a><span style="font-size : small;"> - March 17, 2017</span></li>
+            </ul>
+        </div>
+
+        </div>
+
+        <div class="col-lg-6">
+
+          <h4>Compatible with Emergent Consensus</h4>
+          <p>BIP100 is compatible with emergent consensus, but whereas under that system a miner may choose to accept any size block, a miner following BIP100 observes the 75% supermajority rule, and the 5% change limit rule.</p>
+          <p>
+          When running a non-BIP100 emergent consensus node, you keep consensus with BIP100 by:
+          </p>
+          <ul>
+              <li>Having the <em>EB</em> setting larger or equal to BIP100 block size limit.</li>
+              <li>Miners must not produce blocks bigger than BIP100 allows for.</li>
+          </ul>
+          <h4>When can we have max block size limit at 2MB? 8MB?</h4>
+          <p>
+          This formula can be used to estimate how fast the block size can be increased:</p>
+
+            <blockquote class="blockquote">
+                <p class="mb-0">n = c * 1.05^p</p>
+            </blockquote>
+            <p>Where <em>n</em> is new limit, <em>c</em> is the current limit and <em>p</em> is number of vote periods. Each period is approximately two weeks.
+          </p>
+          <p>Examples, given that current limit is 1MB. Numbers are rounded up:</p>
+          <table style="width : 100%;">
+              <tr><th>New limit</th><th>Vote periods</th><th>Weeks</th></tr>
+              <tr><td>2MB</td><td><a href="https://www.wolframalpha.com/input/?i=2+%3D+1+*+1.05%5Ep">15</a></td><td>30</td></tr>
+              <tr><td>4MB</td><td><a href="https://www.wolframalpha.com/input/?i=4+%3D+1+*+1.05%5Ep">29</a></td><td>58</td></tr>
+              <tr><td>8MB</td><td><a href="https://www.wolframalpha.com/input/?i=8+%3D+1+*+1.05%5Ep">43</a></td><td>86</td></tr>
+              <tr><td>32MB</td><td><a href="https://www.wolframalpha.com/input/?i=32+%3D+1+*+1.05%5Ep">72</a></td><td>144</td></tr>
+              <tr><td>64MB</td><td><a href="https://www.wolframalpha.com/input/?i=64+%3D+1+*+1.05%5Ep">86</a></td><td>172</td></tr>
+        </table>
+        <p></p>
+
+          <h4>Nodes implementing BIP100</h4>
+          <div>
+              <p>BIP100 is implemented and will be in the next release of Bitcoin XT. In addition, BIP100 has been implemented for Bitcoin Unlimited and as a patch on top of Bitcoin Core 0.12.</p>
+          <ul>
+              <li><a href="https://github.com/bitcoinxt/bitcoinxt/pull/188">Bitcoin XT</a></li>
+              <li><a href="https://github.com/BitcoinUnlimited/BitcoinUnlimited/pull/398">Bitcoin Unlimited (<em>with -bip100</em>)</a></li>
+              <li><a href="https://github.com/bitcoinxt/bitcoin/pull/1">Bitcoin Core 0.12 patch</a></li>
+          </ul>
+          <p><span style="font-weight : bolder;">Why Core 0.12?</span> This was the last Core version without segwit code. It is straightforward to combine BIP100 and segwit if needed.</p>
+          </div>
+
+
+    </div><!-- col-lg-6 -->
+</div><!-- container -->
+
+      <footer class="footer">
+          <p><a href="http://github.com/dagurval/bip100.tech">View on GitHub</a></p>
+      </footer>
+
+    </div>
+  </body>
+</html>
