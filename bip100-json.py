@@ -103,16 +103,12 @@ def main_loop():
     last_tip = None
     while True:
         import time
-        try:
-            tip = c.getbestblockhash()
-            if tip == last_tip:
-                time.sleep(1)
-                continue
-            last_tip = tip
-            export_period_info(tip, json_export)
-            print("Done. Waiting of next block...")
-        except Exception as e:
-            print("Critical: %s. Retry in 30 seconds." % e)
-            time.sleep(30)
+        tip = c.getbestblockhash()
+        if tip == last_tip:
+            time.sleep(1)
+            continue
+        last_tip = tip
+        export_period_info(tip, json_export)
+        print("Done. Waiting of next block...")
 
 main_loop()
