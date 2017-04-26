@@ -170,15 +170,15 @@ function updateProgress(votes) {
         return (((perc - 0) * (85 - 0)) / (100 - 0)) + 0;
     };
 
-    perc = Math.floor((bigger / total) * 100);
+    perc = ((bigger / total) * 100).toFixed(1);
     $("#progr-bigger").css("width",  fitWidth(perc) + "%");
     $("#progr-bigger").text(perc + "%");
 
-    perc = Math.floor((keep / total) * 100);
+    perc = ((keep / total) * 100).toFixed(1);
     $("#progr-keep").css("width",  fitWidth(perc) + "%");
     $("#progr-keep").text(perc + "%");
 
-    perc = Math.floor((smaller / total) * 100);
+    perc = ((smaller / total) * 100).toFixed(1);
     $("#progr-smaller").css("width",  fitWidth(perc) + "%");
     $("#progr-smaller").text(perc + "%");
 
