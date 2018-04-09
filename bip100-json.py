@@ -94,7 +94,6 @@ def json_export(period):
     with open(os.path.join(export_dir, "list.json"), "w") as fh:
         fh.write(json.dumps(periods))
 
-    return False
     # We assume that the Bitcoin network won't re-org 24 hours
     # worth of blocks. If we have data for earlier periods already, we can stop.
     return len(period) >= 144 \

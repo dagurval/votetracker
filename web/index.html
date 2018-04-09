@@ -68,7 +68,7 @@ return String(string).replace(/[&<>"'`=\/]/g, function fromEntityMap (s) {
 function voteCell(vote) {
 
     title = "Vote: %vote% - Height: %height% - Coinbase: %coinbase%";
-    url = "https://blockchair.com/bitcoin/block/%height%";
+    url = "https://blockchair.com/bitcoin-cash/block/%height%";
 
     tpl = '<td class="%class%">'
         + '<a href="%url%"'
@@ -295,7 +295,7 @@ $(document).ready(function() {
       <div class="row marketing">
         <div class="col-lg-6">
           <h4>What is BIP100?</h4>
-          <p>BIP100 replaces the static block size limit on Bitcoin Cash (BCH) and in Bitcoin (BTC) with a hard limit set by coinbase vote.</p>
+          <p>BIP100 replaces the static block size limit in Bitcoin Cash (BCH) and in Bitcoin (BTC) with a hard limit set by coinbase vote.</p>
           <p>A simple deterministic system is specified, whereby a 75% mining supermajority may activate a change to the maximum block size each 2016 blocks.</p>
           <p>Each change is limited to a 5% increase from the previous block size hard limit, or a decrease of similar magnitude.</p>
           <p><a href="https://github.com/jgarzik/bip100/blob/master/bip-0100.mediawiki">View BIP100 - Full Specification</a></p>
@@ -315,10 +315,11 @@ $(document).ready(function() {
           </div>
 
 
-        <h4>In the media</h4>
+        <h4>Media</h4>
         <div>
             <ul>
-                <li><a href="http://bitsonline.com/another-look-bip100-scaling/">It's Time to Take Another Look at the BIP100 Miner-Based Scaling Plan</a><span style="font-size : small;"> - April 19, 2017</span></li>
+		    <li><a href="https://www.youtube.com/watch?v=IEM4Rai-5d4">BIP100 talk at The Future of Bitcoin Conference</a><span style="font-size : small;"> - June 30, 2017</span></li>
+                <li><a href="http://bitsonline.com/another-look-bip100-scaling/">It's Time to Take Another Look at the BIP100 Miner-Based Scaling Plan</a><span style="font-size : small;"> - April 20, 2017</span></li>
                 <li><a href="https://news.bitcoin.com/bitcoin-block-size-growth-plan-bip100-gets-update/">Bitcoin Block Size Growth Plan 'BIP100' Gets Update</a><span style="font-size : small;"> - March 17, 2017</span></li>
             </ul>
         </div>
@@ -371,7 +372,7 @@ $(document).ready(function() {
           <div>
               <p>BIP100 is implemented and released with Bitcoin XT. In addition, BIP100 has been implemented for Bitcoin Unlimited and as a patch on top of Bitcoin Core 0.12.</p>
           <ul>
-              <li><a href="https://github.com/bitcoinxt/bitcoinxt/pull/188">Bitcoin XT</a></li>
+              <li><a href="https://bitcoinxt.software">Bitcoin XT</a></li>
               <li><a href="https://github.com/BitcoinUnlimited/BitcoinUnlimited/pull/398">Bitcoin Unlimited (<em>with -bip100</em>)</a></li>
               <li><a href="https://github.com/bitcoinxt/bitcoin/pull/1">Bitcoin Core 0.12 patch</a></li>
           </ul>
@@ -383,7 +384,7 @@ $(document).ready(function() {
 </div><!-- container -->
 
       <footer class="footer">
-          <p><a href="http://github.com/dagurval/bip100.tech">View on GitHub</a></p>
+          <p><a href="http://github.com/dagurval/bip100.tech">View bip100.tech on GitHub</a> | Powered by Bitcoin XT</p>
       </footer>
 
     </div>
