@@ -25,16 +25,3 @@ table.votetable td a {
     bottom: 0;
     text-decoration: none;
 }
-
-.vote-notfound {
-    background-color : darkgray;
-}
-.vote-keepcurrent {
-    background-color : rgb(2, 117, 216);
-}
-.vote-up {
-    background-color : rgb(92, 184, 92);
-}
-.vote-down {
-    background-color : rgb(240, 173, 78);
-}
