@@ -24,15 +24,14 @@
   <body>
 
 <script type="text/javascript">
-
 var BLOCK_NOT_FOUND = -1;
 var BLOCKS_IN_PERIOD = 2016;
 
 function fetch(what, succs, err) {
     $.ajax({
-        url: "/period/" + what + ".json",
+        url: "https://bip100.tech/period/" + what + ".json",
         success: succs,
-        error : err
+        error: err
     });
 }
 
@@ -49,58 +48,61 @@ function toMB(bytes) {
 }
 
 var entityMap = {
-'&': '&amp;',
-'<': '&lt;',
-'>': '&gt;',
-'"': '&quot;',
-"'": '&#39;',
-'/': '&#x2F;',
-'`': '&#x60;',
-'=': '&#x3D;'
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;',
+    '/': '&#x2F;',
+    '`': '&#x60;',
+    '=': '&#x3D;'
 };
 
-function escapeHtml (string) {
-return String(string).replace(/[&<>"'`=\/]/g, function fromEntityMap (s) {
-  return entityMap[s];
-});
+function escapeHtml(string) {
+    return String(string).replace(/[&<>"'`=\/]/g, function fromEntityMap(s) {
+        return entityMap[s];
+    });
 }
 
-function voteCell(vote) {
+function buildVote(vote, stats) {
+    var tooltip = "Vote: %vote% - Height: %height% - Coinbase: %coinbase%";
+    var url = "https://blockchair.com/bitcoin-cash/block/%height%";
 
-    title = "Vote: %vote% - Height: %height% - Coinbase: %coinbase%";
-    url = "https://blockchair.com/bitcoin-cash/block/%height%";
+    var want = vote["sizelimitvote"];
+    var curr = vote["sizelimit"];
+    var style = "";
+    var votestr = toMB(want) + "MB";
 
-    tpl = '<td class="%class%">'
-        + '<a href="%url%"'
-            + 'title="%title%"'
-            + 'data-toggle="tooltip"'
-            + 'target="_blank"></a></td>';
-
-    want = vote["sizelimitvote"];
-    curr = vote["sizelimit"];
-    style = "";
-    votestr = toMB(vote["sizelimitvote"]) + "MB";
     if (want == BLOCK_NOT_FOUND) {
         style = "vote-notfound";
-        title = "Block not found yet";
+        tooltip = "Block not found yet";
         url = "#";
-        votestr = "No yet voted";
-    }
-    else if (want == 0 || want == curr)
-    {
-        style = "vote-keepcurrent";
+    } else if (want == 0) {
+        stats.passive++;
+        style = "bg-info";
+        votestr = "No vote (Keep current)";
+    } else if (want == curr) {
+        stats.active++;
+        style = "bg-primary";
         votestr = "Keep current";
-    }
-    else if (want < curr)
-        style = "vote-down";
-    else if (want > curr)
-        style = "vote-up";
-    else
+    } else if (want < curr) {
+        stats.decrease++;
+        style = "bg-warning";
+    } else if (want > curr) {
+        stats.increase++;
+        style = "bg-success";
+    } else
         console.log("ERROR voteCell");
 
-    return tpl
+    var template = '<td class="%class%">'
+        + '<a href="%url%"'
+        + 'title="%tooltip%"'
+        + 'data-toggle="tooltip"'
+        + 'target="_blank"></a></td>';
+
+    return template
         .replace("%url%", url)
-        .replace("%title%", title)
+        .replace("%tooltip%", tooltip)
         .replace("%class%", style)
         .replace("%height%", vote["height"])
         .replace("%height%", vote["height"])
@@ -109,98 +111,89 @@ function voteCell(vote) {
 }
 
 function fillMissingVotes(votes) {
-    missing = BLOCKS_IN_PERIOD - votes.length;
-    for (i = 0; i < missing; ++i)
-        votes.push({ "sizelimitvote" : BLOCK_NOT_FOUND });
+    var missing = BLOCKS_IN_PERIOD - votes.length;
+    for (var i = 0; i < missing; ++i)
+        votes.push({ "sizelimitvote": BLOCK_NOT_FOUND });
     return votes;
 }
 
-function renderVoteRow(votes) {
-    html = '<table class="votetable"><tr>';
-    $.each(votes, function(k, v) {
-        newRow = k % 72 == 0;
-        if (newRow)
+function renderUniqueVotes(votes) {
+    var stats = {
+        passive: 0,
+        active: 0,
+        increase: 0,
+        decrease: 0
+    };
+    var html = '<table class="votetable"><tr>';
+    $.each(votes, function (index, v) {
+        if (index % 72 == 0)
             html += "</tr><tr>";
-        html += voteCell(v);
+        html += buildVote(v, stats);
     });
     html += "</tr></table>";
     $("#voterow").html(html);
     $('[data-toggle="tooltip"]').tooltip();
+    return stats;
 }
 
 function updateVoteHeader(votes) {
-    start = votes[0]["height"];
-    is_current = votes[votes.length - 1]["sizelimitvote"] == BLOCK_NOT_FOUND;
-    end = start + (BLOCKS_IN_PERIOD - 1);
+    var start = votes[0]["height"];
+    var is_current = votes[votes.length - 1]["sizelimitvote"] == BLOCK_NOT_FOUND;
+    var end = start + (BLOCKS_IN_PERIOD - 1);
 
-    header = is_current
-                   ? 'Votes current period <br /><span style="font-size : smaller;">(' + start.toLocaleString() + " - " + end.toLocaleString() + ")</span>"
+    var header = is_current
+        ? 'Votes current period <br /><span style="font-size : smaller;">(' + start.toLocaleString() + " - " + end.toLocaleString() + ")</span>"
         : "Votes for period " + start + " - " + end;
 
     $("#miner-votes-header").html(header);
 }
 
-function updateProgress(votes) {
-    curr_limit = votes[0]["sizelimit"];
+function updateProgress(votes, stats) {
+    var is_current_period = votes[votes.length - 1]["sizelimitvote"] == BLOCK_NOT_FOUND;
 
-    keep = 0;
-    bigger = 0;
-    smaller = 0;
-
-    is_current_period = false;
-
-    $.each(votes, function(i, v) {
-        vote = v["sizelimitvote"];
-        if (vote == BLOCK_NOT_FOUND) {
-            is_current_period = true;
-            return;
-        }
-        if (vote == 0 || vote == curr_limit)
-            keep++;
-        else if (vote > curr_limit)
-            bigger++;
-        else
-            smaller++;
-    });
-
-    total = keep + bigger + smaller;
+    var total = stats.passive + stats.active + stats.increase + stats.decrease;
 
     function fitWidth(perc) {
-        // labels take up 15% of the width, so reduce perc accordingly.
+        // labels take up 15% of the width, so reduce percentage accordingly.
         return (((perc - 0) * (85 - 0)) / (100 - 0)) + 0;
     };
 
-    perc = ((bigger / total) * 100).toFixed(1);
-    $("#progr-bigger").css("width",  fitWidth(perc) + "%");
+    var perc = ((stats.increase / total) * 100).toFixed(1);
+    $("#progr-bigger").css("width", fitWidth(perc) + "%");
     $("#progr-bigger").text(perc + "%");
 
-    perc = ((keep / total) * 100).toFixed(1);
-    $("#progr-keep").css("width",  fitWidth(perc) + "%");
-    $("#progr-keep").text(perc + "%");
-
-    perc = ((smaller / total) * 100).toFixed(1);
-    $("#progr-smaller").css("width",  fitWidth(perc) + "%");
+    perc = ((stats.decrease / total) * 100).toFixed(1);
+    $("#progr-smaller").css("width", fitWidth(perc) + "%");
     $("#progr-smaller").text(perc + "%");
+
+    perc = ((stats.active / total) * 100).toFixed(1);
+    $("#progr-keep").css("width", fitWidth(perc) + "%");
+    $("#progr-keep").text(perc + "% active");
+
+    perc = ((stats.passive / total) * 100).toFixed(1);
+    $("#progr-passive").css("width", fitWidth(perc) + "%");
+    $("#progr-passive").text(perc + "% passive");
 
     if (is_current_period) {
         $("#progr-bigger").addClass("progress-bar-animated");
         $("#progr-keep").addClass("progress-bar-animated");
+        $("#progr-passive").addClass("progress-bar-animated");
         $("#progr-smaller").addClass("progress-bar-animated");
     }
 }
 
 function onPeriodLoaded(votes) {
-    votes = fillMissingVotes(votes);
+    fillMissingVotes(votes);
     updateVoteHeader(votes);
-    renderVoteRow(votes);
-    updateProgress(votes);
+    var stats = renderUniqueVotes(votes);
+    updateProgress(votes, stats);
     updateStats(votes);
 }
 
 function updateStats(votes) {
-    curr = parseInt(votes[0]["sizelimit"]);
-    next_max = curr * 1.05;
-    next_min = Math.max(toBytes(1) , curr * 0.95);
+    var curr = parseInt(votes[0]["sizelimit"]);
+    var next_max = curr * 1.05;
+    var next_min = Math.max(toBytes(1), curr * 0.95);
 
     $("#current-size").text(toMB(curr) + "MB");
     $("#next-max").text(toMB(next_max) + "MB");
@@ -210,13 +203,12 @@ function updateStats(votes) {
 function unixToDate(unixtime) {
     var d = new Date(unixtime * 1000);
     return d.getDate();
-
 }
 
 function updatePeriodDropdown(periods) {
-    menu_items = "";
-    $.each(periods.slice().reverse(), function(i, p) {
-        item = '<a class="dropdown-item" href="/?%period_start%">'
+    var menu_items = "";
+    $.each(periods.slice().reverse(), function (i, p) {
+        var item = '<a class="dropdown-item" href="/?%period_start%">'
             + '%period_start% - %period_end%</a>';
         item = item
             .replace("%period_start%", p)
@@ -227,11 +219,11 @@ function updatePeriodDropdown(periods) {
     $("#period-dropdown").html(menu_items);
 }
 
-$(document).ready(function() {
-    fetch("list", function(periods) {
+$(document).ready(function () {
+    fetch("list", function (periods) {
         updatePeriodDropdown(periods);
         var latest = periods[periods.length - 1];
-        var period = document.URL.substr(document.URL.indexOf('?')+1)
+        var period = document.URL.substr(document.URL.indexOf('?') + 1)
 
         if (periods.indexOf(period) == -1)
             // invalid selection / not selected
@@ -262,6 +254,8 @@ $(document).ready(function() {
         <div class="progress" style="margin-top : 1em;">
             <div style="width : 15%; text-align : left;">Keep size:</div>
             <div id="progr-keep"  class="progress-bar progress-bar-striped"
+              role="progressbar" style="width: 0%"></div>
+            <div id="progr-passive"  class="progress-bar progress-bar-striped bg-info"
               role="progressbar" style="width: 0%"></div>
         </div>
 

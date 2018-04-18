@@ -33,7 +33,7 @@ def get_coinbase_str(block):
     except JSONRPCException as e:
         # This triggers if -txindex is not set in bitcoin.conf
         return "UNAVAILABLE"
-    coinbase = tx["vin"][0]["coinbase"];
+    coinbase = tx["vin"][0]["coinbase"]
     return bytes.fromhex(coinbase).decode("utf-8", "ignore")
 
 def get_block_info(block):
