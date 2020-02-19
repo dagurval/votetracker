@@ -1,3 +1,0 @@
-[submodule "lib/bitcoinrpc"]
-	path = lib/bitcoinrpc
-	url = https://github.com/dagurval/python-bitcoinrpc.git
