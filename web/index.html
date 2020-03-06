@@ -25,7 +25,6 @@
 
 <script type="text/javascript">
 var BLOCK_NOT_FOUND = -1;
-var BLOCK_REJECT = -2;
 var BLOCKS_IN_PERIOD = 2016;
 
 function fetch(what, succs, err) {
@@ -58,7 +57,7 @@ function escapeHtml(string) {
 }
 
 function buildVote(vote, stats) {
-    var tooltip = "Vote: %vote% - Height: %height% - Version: %version%";
+    var tooltip = "Vote: %vote% - Height: %height% - Version: %version% - Coinbase: %scriptSig%";
     var url = "https://explorer.bitcoin.com/bch/block/%height%";
 
     var style = "";
@@ -70,19 +69,21 @@ function buildVote(vote, stats) {
         style = "vote-notfound";
         tooltip = "Block not found yet";
         url = "#";
-    } else if (votes === null) {
-        stats.nochange++;
-        style = "bg-info";
-        votestr = "No change";
-    } else if (votes == BLOCK_REJECT) {
-        stats.reject++;
-        style = "bg-success";
-        votestr = "Explicitly voted against";
     }
     else if (votes != null) {
         stats.fund++;
         style = "bg-warning";
         votestr = votes
+    }
+    else if (vote["scriptSig"].includes("BCHN")) {
+        stats.bchn++;
+        style = "bg-success";
+        votestr = "Supports BCHN";
+    }
+    else if (votes === null) {
+        stats.nochange++;
+        style = "bg-info";
+        votestr = "No change";
     } else {
         console.log("ERROR voteCell");
     }
@@ -100,7 +101,8 @@ function buildVote(vote, stats) {
         .replace("%height%", vote["height"])
         .replace("%height%", vote["height"])
         .replace("%vote%", votestr)
-        .replace("%version%", vote["version"]);
+        .replace("%version%", vote["version"])
+        .replace("%scriptSig%", vote["scriptSig"]);
 
 }
 
@@ -115,7 +117,7 @@ function renderUniqueVotes(votes) {
     var stats = {
         nochange: 0,
         fund: 0,
-        reject: 0
+        bchn: 0
     };
     var html = '<table class="votetable"><tr>';
     $.each(votes, function (index, v) {
@@ -144,14 +146,14 @@ function updateVoteHeader(votes) {
 function updateProgress(votes, stats) {
     var is_current_period = votes[votes.length - 1]["votes"] == BLOCK_NOT_FOUND;
 
-    var total = stats.nochange + stats.fund + stats.reject
+    var total = stats.nochange + stats.fund + stats.bchn
 
     function fitWidth(perc) {
         // labels take up 15% of the width, so reduce percentage accordingly.
         return (((perc - 0) * (85 - 0)) / (100 - 0)) + 0;
     };
 
-    var perc = ((stats.reject / total) * 100).toFixed(1);
+    var perc = ((stats.bchn / total) * 100).toFixed(1);
     $("#progr-bigger").css("width", fitWidth(perc) + "%");
     $("#progr-bigger").text(perc + "%");
 
@@ -236,8 +238,8 @@ $(document).ready(function () {
                  class="progress-bar progress-bar-striped bg-warning"
                   role="progressbar" style="width: 0%"></div>
         </div>
-        <div class="progress" style="margin-top : 1em; visibility: hidden">
-            <span style="width : 15%; text-align: left;">Explicitly reject:</span>
+        <div class="progress" style="margin-top : 1em;">
+            <span style="width : 15%; text-align: left;"><a href="https://bitcoincashnode.org">BCHN</a> block (reject infra):</span>
             <div id="progr-bigger" class="progress-bar progress-bar-striped bg-success"
                   role="progressbar" style="width: 0%"></div>
         </div>

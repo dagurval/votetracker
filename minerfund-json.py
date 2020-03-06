@@ -1,11 +1,12 @@
 #!/usr/bin/python3
 import sys
 from bitcoincash.electrum import Electrum
-from bitcoincash.core import CBlockHeader, x
+from bitcoincash.core import CBlockHeader, x, CTransaction
 from bitcoincash.electrum.svr_info import ServerInfo
 
 import pickle
 import asyncio
+import html
 
 BLOCKS_IN_PERIOD = 2016
 
@@ -37,19 +38,22 @@ def parse_votes(version):
         return None
     return ", ".join(whitelist)
 
-def get_block_info(header, height):
+def get_block_info(header, coinbase, height):
     version = format(header.nVersion, '#034b')
+    scriptsig = coinbase.vin[0].scriptSig
     return {
         "height" : height,
         "version": version,
         "votes" : parse_votes(int(version, 2)),
+        "scriptSig": html.escape(scriptsig.decode('utf-8', 'ignore')),
     }
 
-def export_period_info(tip_height, headers, export_func):
+def export_period_info(tip_height, headers, coinbases, export_func):
     curr_height = tip_height
     period = [ ]
     while curr_height >= START_HEIGHT:
         header = headers[curr_height]
+        coinbase = coinbases[curr_height]
 
         if curr_height % BLOCKS_IN_PERIOD == 0:
             # start of period
@@ -59,7 +63,7 @@ def export_period_info(tip_height, headers, export_func):
             export_func(period)
             period = [ ]
 
-        period.append(get_block_info(header, curr_height))
+        period.append(get_block_info(header, coinbase, curr_height))
         curr_height -= 1
 
 def json_export(period):
@@ -87,7 +91,6 @@ def json_export(period):
         fh.write(json.dumps(periods))
 
 async def sync_headers(cli, headers, tip_height):
-    await cli.connect()
 
     for h in range(START_HEIGHT, tip_height + 1):
 
@@ -99,9 +102,23 @@ async def sync_headers(cli, headers, tip_height):
         headers[h] = CBlockHeader.deserialize(x(header_hex))
         print("Fetched header {}".format(h))
 
-async def main_loop(headers):
+async def sync_coinbases(cli, coinbases, tip_height):
+
+    for h in range(START_HEIGHT, tip_height + 1):
+
+        # TODO: Discover reorgs
+        if h in coinbases:
+            continue
+
+        coinbase_txid = await cli.RPC('blockchain.transaction.id_from_pos', h, 0)
+        tx_raw = await cli.RPC('blockchain.transaction.get', coinbase_txid)
+        print(f"Fetched coinbase {h} {coinbase_txid}")
+        coinbases[h] = CTransaction.deserialize(x(tx_raw))
+
+
+async def main_loop(headers, coinbases):
     cli = Electrum()
-    server = ServerInfo("imaginary", "bch.imaginary.cash", "s50002")
+    server = ServerInfo("bestserver", "bitcoincash.network", "s50002")
     await cli.connect()
     tip, new_tips = cli.subscribe('blockchain.headers.subscribe')
     tip = await tip
@@ -109,10 +126,14 @@ async def main_loop(headers):
 
     try:
         while True:
-            await sync_headers(cli, headers, tip['height'])
-            export_period_info(tip['height'], headers, json_export)
+            await asyncio.gather(*[
+                sync_headers(cli, headers, tip['height']),
+                sync_coinbases(cli, coinbases, tip['height'])])
+            export_period_info(tip['height'], headers, coinbases, json_export)
             print("Done. Waiting for next block...")
-            tip = await new_tips.get()
+            # tip = await new_tips.get()
+            raise Exception("workaround die")
+
     finally:
         await cli.close()
 
@@ -125,11 +146,24 @@ except FileNotFoundError as _:
     headers = { }
 
 try:
+    with open("coinbases.pickle", "rb") as fh:
+        coinbases = pickle.load(fh)
+        for k in coinbases.keys():
+            coinbases[k] = CTransaction.deserialize(coinbases[k])
+except FileNotFoundError as _:
+    coinbases = { }
+
+try:
     loop = asyncio.get_event_loop()
-    loop.run_until_complete(main_loop(headers))
+    loop.run_until_complete(main_loop(headers, coinbases))
     loop.close()
 finally:
     with open("headers.pickle", "wb") as fh:
         for k in headers.keys():
             headers[k] = headers[k].serialize()
         pickle.dump(headers, fh)
+
+    with open("coinbases.pickle", "wb") as fh:
+        for k in coinbases.keys():
+            coinbases[k] = coinbases[k].serialize()
+        pickle.dump(coinbases, fh)
